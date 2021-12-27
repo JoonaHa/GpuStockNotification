@@ -1,0 +1,11 @@
+{
+  "name": "gpu-stock-notification",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "JoonHa",
+  "license": " GPL-2.0-or-later"
+}
