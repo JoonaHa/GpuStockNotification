@@ -1,79 +1,54 @@
-const puppeteer = require('puppeteer');
+require("dotenv").config();
+const puppeteer = require("puppeteer");
+const axios = require("axios");
+const amdAvailability = require("./scrapers/amd");
 
-const SEARCH_TERM = 'processor';
+const AMD_SEARCH_TERM = "processor";
+const TELEGRAM_API_URL = "https://api.telegram.org/bot";
+const TELEGRAM_API_TOKEN = process.env.TELEGRAMBOT_TOKEN;
+const TELEGRAM_CHANNEL_ID = process.env.TELEGRAM_CHANNEL_ID;
 // const SEARCH_TERM = 'graphics';
-const PRODUCT_ELEM = 'shop-content';
-const PRODUCT_TITLE = '.shop-title';
-const PRODUCT_LINKS = '.shop-links';
-const PRODUCT_PRICE = '.shop-price';
-const PRODUCT_HREF = '.shop-full-specs-link';
-const PAGE_URL = 'https://www.amd.com/en/direct-buy/fi';
-const USERAGENT =
-  'Mozilla/5.0 (X11; Linux x86_64) ' +
-  'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2403.157 Safari/537.36';
-async function run() {
-  const browser = await puppeteer.launch({headless: true});
-  const page = await browser.newPage();
-  // Site doesn't render if default useragent
-  await page.setUserAgent(USERAGENT);
-  await page.goto(PAGE_URL, {
-    waitUntil: 'networkidle2',
-  });
-  console.log('Page loaded');
+async function availability() {
+  const browser = await puppeteer.launch({ headless: true });
 
-  // Get product containing the search term from the page
-  const availableProducts = await page.evaluate(
-      (
-          searchTerm,
-          productElemSelector,
-          productTitleSelector,
-          productLinksSelector,
-          productPriceSelector,
-          productHrefSelector,
-      ) => {
-        const wantedProducts = [];
-        const items = Array.from(
-            document.getElementsByClassName(productElemSelector),
-        );
-
-        items.forEach((elem) => {
-          const productTitle = elem.querySelector(productTitleSelector).innerText;
-          const productLink = elem.querySelector(productLinksSelector).innerText;
-          const productPrice = elem.querySelector(productPriceSelector).innerText;
-          const productHref = elem
-              .querySelector(productHrefSelector)
-              .querySelector('a').href;
-          console.log(productTitle);
-          if (
-            productTitle.toLowerCase().includes(searchTerm) &&
-          productLink.toLowerCase().includes('add')
-          ) {
-            producObject = {
-              title: productTitle,
-              price: productPrice,
-              statusLink: productLink,
-              directLink: productHref,
-            };
-            wantedProducts.push(producObject);
-          }
-        });
-        return wantedProducts;
-      },
-      SEARCH_TERM,
-      PRODUCT_ELEM,
-      PRODUCT_TITLE,
-      PRODUCT_LINKS,
-      PRODUCT_PRICE,
-      PRODUCT_HREF,
+  amdProducts = await amdAvailability.checkAvailability(
+    browser,
+    AMD_SEARCH_TERM
   );
-
-  console.debug(availableProducts);
+  console.debug(amdProducts);
   browser.close();
 
-  if (availableProducts.length > 0) {
-    console.log('Available products');
+  if (amdProducts.length > 0) {
     // send notification
+    console.log("Sending notifications");
+    await Promise.all(
+      amdProducts.map(async (item) => {
+        await send_to_telegram(item);
+      })
+    );
   }
 }
 
-run();
+async function send_to_telegram(product) {
+  const apiUrl = TELEGRAM_API_URL + TELEGRAM_API_TOKEN + "/" + "sendMessage";
+
+  const payload = {
+    chat_id: TELEGRAM_CHANNEL_ID,
+    text: `${product.title}\nPRICE:${product.price}\nProduct now in stock!\n\nBUY: ${product.directLink}`,
+    disable_web_page_preview: false,
+    disable_notification: false,
+    protect_content: true,
+  };
+
+  axios
+    .post(apiUrl, payload)
+    .then((res) => {
+      console.log(`statusCode: ${res.status}`);
+      console.log(res);
+    })
+    .catch((error) => {
+      console.error(error);
+    });
+}
+
+availability();
